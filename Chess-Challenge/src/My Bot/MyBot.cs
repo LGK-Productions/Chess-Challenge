@@ -16,6 +16,8 @@ public class MyBot : IChessBot
     };
 
     private int msPerTurn = 100;
+    private int minDepth = 3;
+    private int maxDepth = 5;
     private float lastMoveFinishedTime;
     private int branchesSearched;
     public Move Think(Board board, Timer timer)
@@ -40,7 +42,7 @@ public class MyBot : IChessBot
             lastMoveFinishedTime = timer.MillisecondsElapsedThisTurn;
             
             board.MakeMove(move);
-            int eval = MinMax(board, timer, 4, alpha, beta);
+            int eval = MinMax(board, timer, maxDepth, alpha, beta);
             board.UndoMove(move);
             
             if (isWhite ? eval > bestValue : eval < bestValue)
@@ -78,28 +80,48 @@ public class MyBot : IChessBot
         Move[] moves = board.GetLegalMoves();
         
         //branch sorting. This makes it more Likely for branches to be pruned
-        int z = 0;
+        List<int> skippedMoves = new List<int>(moves.Length);
         for (int i = 0; i < moves.Length; i++)
         {
             ulong bitboard = isWhite ? board.BlackPiecesBitboard : board.WhitePiecesBitboard;
             board.MakeMove(moves[i]);
             ulong newBitboard = isWhite ? board.BlackPiecesBitboard : board.WhitePiecesBitboard;
-            board.UndoMove(moves[i]);
+            
             if (newBitboard < bitboard) //a piece was taken, so prioritize this move
             {
-                (moves[z], moves[i]) = (moves[i], moves[z]);
-                z++;
-            } 
+                //Iterative deepening: go further if a piece was taken
+                int newDepth = depth - 1;
+                bestValue = isWhite ? Math.Max(bestValue, MinMax(board, timer, newDepth, alpha, beta)) 
+                    : Math.Min(bestValue, MinMax(board, timer, newDepth, alpha, beta));
+                board.UndoMove(moves[i]);
+                
+                if (isWhite)
+                {
+                    alpha = Math.Max(alpha, bestValue);
+                    if (beta <= alpha)
+                        break; 
+                } else
+                {
+                    beta = Math.Min(beta, bestValue);
+                    if (beta <= alpha)
+                        break;
+                }
+            }
+            else
+            {
+                board.UndoMove(moves[i]);
+                skippedMoves.Add(i);
+            }
+            
         }
 
-        foreach (var move in moves)
+        foreach (var move in skippedMoves) //check remaining moves with no pieces taken
         {
-            int nextDepth = /*depth - Math.Max(1, (int)((timer.MillisecondsElapsedThisTurn - lastMoveFinishedTime) / msPerTurn * depth))*/depth - 1;
-                
-            board.MakeMove(move);
-            bestValue = isWhite ? Math.Max(bestValue, MinMax(board, timer, nextDepth, alpha, beta)) : Math.Min(bestValue, MinMax(board, timer, nextDepth, alpha, beta));
-            board.UndoMove(move);
-
+            int newDepth = depth <= maxDepth - minDepth ? 0 : depth - 1;
+            board.MakeMove(moves[move]);
+            bestValue = isWhite ? Math.Max(bestValue, MinMax(board, timer, newDepth, alpha, beta)) 
+                : Math.Min(bestValue, MinMax(board, timer, newDepth, alpha, beta));
+            board.UndoMove(moves[move]);   
             if (isWhite)
             {
                 alpha = Math.Max(alpha, bestValue);
