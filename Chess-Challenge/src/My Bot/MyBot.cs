@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using ChessChallenge.API;
 
 public class MyBot : IChessBot
@@ -39,7 +40,7 @@ public class MyBot : IChessBot
             lastMoveFinishedTime = timer.MillisecondsElapsedThisTurn;
             
             board.MakeMove(move);
-            int eval = MinMax(board, timer, 6, alpha, beta);
+            int eval = MinMax(board, timer, 4, alpha, beta);
             board.UndoMove(move);
             
             if (isWhite ? eval > bestValue : eval < bestValue)
@@ -62,6 +63,7 @@ public class MyBot : IChessBot
         }
 
         Console.WriteLine("Searched " + branchesSearched + " branches. Best Move is " + bestMove.MovePieceType + " to " + bestMove.TargetSquare + ". Eval: " + bestValue);
+        Console.WriteLine("Time per 1000000 branches: " + (float)timer.MillisecondsElapsedThisTurn / ((float)branchesSearched / 1000000f));
         return bestMove;
     }
 
@@ -73,9 +75,26 @@ public class MyBot : IChessBot
         bool isWhite = board.IsWhiteToMove;
         int bestValue = isWhite ? int.MinValue : int.MaxValue;
 
-        foreach (var move in board.GetLegalMoves())
+        Move[] moves = board.GetLegalMoves();
+        
+        //branch sorting. This makes it more Likely for branches to be pruned
+        int z = 0;
+        for (int i = 0; i < moves.Length; i++)
         {
-            int nextDepth = depth - Math.Max(1, (int)((timer.MillisecondsElapsedThisTurn - lastMoveFinishedTime) / msPerTurn * depth));
+            ulong bitboard = isWhite ? board.BlackPiecesBitboard : board.WhitePiecesBitboard;
+            board.MakeMove(moves[i]);
+            ulong newBitboard = isWhite ? board.BlackPiecesBitboard : board.WhitePiecesBitboard;
+            board.UndoMove(moves[i]);
+            if (newBitboard < bitboard) //a piece was taken, so prioritize this move
+            {
+                (moves[z], moves[i]) = (moves[i], moves[z]);
+                z++;
+            } 
+        }
+
+        foreach (var move in moves)
+        {
+            int nextDepth = /*depth - Math.Max(1, (int)((timer.MillisecondsElapsedThisTurn - lastMoveFinishedTime) / msPerTurn * depth))*/depth - 1;
                 
             board.MakeMove(move);
             bestValue = isWhite ? Math.Max(bestValue, MinMax(board, timer, nextDepth, alpha, beta)) : Math.Min(bestValue, MinMax(board, timer, nextDepth, alpha, beta));
@@ -93,7 +112,7 @@ public class MyBot : IChessBot
                     break;
             }
         }
-
+        
         return bestValue;
     }
 
@@ -104,13 +123,17 @@ public class MyBot : IChessBot
     /// <returns>a static evaluation of the given position</returns>
     private int Eval(Board board)
     {
+        branchesSearched++;
+        if (board.IsDraw())
+            return 0;
+        if (board.IsInCheckmate())
+            return board.IsWhiteToMove ? int.MinValue : int.MaxValue;
+        
         int eval = 0;
         foreach (PieceType pieceType in pieceValues.Keys)
         {
             eval += (board.GetPieceList(pieceType, true).Count - board.GetPieceList(pieceType, false).Count) * (int)pieceValues[pieceType];
         }
-
-        branchesSearched++;
         return eval;
     }
 }
