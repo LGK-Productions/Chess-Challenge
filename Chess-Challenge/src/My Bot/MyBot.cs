@@ -37,22 +37,23 @@ public class MyBot : IChessBot
         foreach (Move move in board.GetLegalMoves())
         {
             lastMoveFinishedTime = timer.MillisecondsElapsedThisTurn;
+            
             board.MakeMove(move);
             int eval = MinMax(board, timer, 6, alpha, beta);
-
-            if ((isWhite ? eval > bestValue : eval < bestValue))
+            board.UndoMove(move);
+            
+            if (isWhite ? eval > bestValue : eval < bestValue)
             {
                 bestValue = eval;
                 bestMove = move;
             }
-            board.UndoMove(move);
-
+            
             if (isWhite)
             {
                 alpha = Math.Max(alpha, bestValue);
                 if (beta <= alpha)
-                    break;
-            } else 
+                    break; 
+            } else
             {
                 beta = Math.Min(beta, bestValue);
                 if (beta <= alpha)
@@ -77,8 +78,7 @@ public class MyBot : IChessBot
             int nextDepth = depth - Math.Max(1, (int)((timer.MillisecondsElapsedThisTurn - lastMoveFinishedTime) / msPerTurn * depth));
                 
             board.MakeMove(move);
-            if (isWhite)
-                bestValue = isWhite ? Math.Max(bestValue, MinMax(board, timer, nextDepth, alpha, beta)) : Math.Min(bestValue, MinMax(board, timer, nextDepth, alpha, beta));
+            bestValue = isWhite ? Math.Max(bestValue, MinMax(board, timer, nextDepth, alpha, beta)) : Math.Min(bestValue, MinMax(board, timer, nextDepth, alpha, beta));
             board.UndoMove(move);
 
             if (isWhite)
