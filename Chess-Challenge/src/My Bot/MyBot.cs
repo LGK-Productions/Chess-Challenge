@@ -16,8 +16,8 @@ public class MyBot : IChessBot
         pieceValues[(int)PieceType.King] = 90;
     }
 
-    const int minDepth = 3;
-    const int maxDepth = 5;
+    const int targetDepth = 4;
+    const int iterativeLayers = 2;
     private int branchesSearched;
     public Move Think(Board board, Timer timer)
     {
@@ -32,7 +32,7 @@ public class MyBot : IChessBot
         foreach (Move move in board.GetLegalMoves())
         {
             board.MakeMove(move);
-            int eval = MinMax(board, timer, maxDepth, alpha, beta);
+            int eval = MinMax(board, timer, targetDepth + iterativeLayers - 1, alpha, beta);
             board.UndoMove(move);
 
             if (isWhite ? eval > bestValue : eval < bestValue)
@@ -42,17 +42,11 @@ public class MyBot : IChessBot
             }
 
             if (isWhite)
-            {
                 alpha = Math.Max(alpha, bestValue);
-                if (beta <= alpha)
-                    break;
-            }
             else
-            {
                 beta = Math.Min(beta, bestValue);
-                if (beta <= alpha)
-                    break;
-            }
+            if (beta <= alpha)
+                break;
         }
 
         Console.WriteLine("Searched " + branchesSearched + " branches. Best Move is " + bestMove.MovePieceType + " to " + bestMove.TargetSquare + ". Eval: " + bestValue);
@@ -62,6 +56,10 @@ public class MyBot : IChessBot
 
     private int MinMax(Board board, Timer timer, int depth, int alpha, int beta)
     {
+        if (board.IsInCheckmate())
+            return board.IsWhiteToMove ? int.MinValue + (targetDepth + iterativeLayers - depth) : int.MaxValue - (targetDepth + iterativeLayers - depth);
+        if (board.IsDraw())
+            return 0;
         if (depth <= 0)
             return Eval(board);
 
@@ -92,43 +90,33 @@ public class MyBot : IChessBot
                 : Math.Min(bestValue, MinMax(board, timer, newDepth, alpha, beta));
             board.UndoMove(moves[i]);
 
-            if (PruneCalcShouldBreak())
+            if (isWhite)
+                alpha = Math.Max(alpha, bestValue);
+            else
+                beta = Math.Min(beta, bestValue);
+            if (beta <= alpha)
                 break;
         }
 
         foreach (var move in skippedMoves) //check remaining moves with no pieces taken
         {
-            int newDepth = depth <= maxDepth - minDepth ? 0 : depth - 1;
+            int newDepth = depth <= iterativeLayers ? 0 : depth - 1;
             board.MakeMove(moves[move]);
             bestValue = isWhite ? Math.Max(bestValue, MinMax(board, timer, newDepth, alpha, beta))
                 : Math.Min(bestValue, MinMax(board, timer, newDepth, alpha, beta));
             board.UndoMove(moves[move]);
 
-            if (PruneCalcShouldBreak())
+            if (isWhite)
+                alpha = Math.Max(alpha, bestValue);
+            else
+                beta = Math.Min(beta, bestValue);
+            if (beta <= alpha)
                 break;
         }
-
-        // ToDo: This might create a display class causing additional memory allocations
-        // But the compiler might also create a struct...
-        bool PruneCalcShouldBreak()
-        {
-            if (isWhite)
-            {
-                alpha = Math.Max(alpha, bestValue);
-                if (beta <= alpha)
-                    return true;
-            }
-            else
-            {
-                beta = Math.Min(beta, bestValue);
-                if (beta <= alpha)
-                    return true;
-            }
-            return false;
-        }
-
+        
         return bestValue;
     }
+    
 
     /// <summary>
     /// basic evaluation, just accounts for basic piece values
@@ -138,15 +126,13 @@ public class MyBot : IChessBot
     private int Eval(Board board)
     {
         branchesSearched++;
-        if (board.IsDraw())
-            return 0;
-        if (board.IsInCheckmate())
-            return board.IsWhiteToMove ? int.MinValue : int.MaxValue;
 
         int eval = 0;
         for (PieceType pieceType = PieceType.Pawn; pieceType <= PieceType.King; pieceType++)
         {
-            eval += (board.GetPieceList(pieceType, true).Count - board.GetPieceList(pieceType, false).Count) * pieceValues[(int)pieceType];
+            eval += (board.GetPieceList(pieceType, true).Count 
+                     - board.GetPieceList(pieceType, false).Count) 
+                    * pieceValues[(int)pieceType];
         }
 
         return eval;
